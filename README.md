@@ -1,106 +1,63 @@
-[![Udacity - Robotics NanoDegree Program](https://s3-us-west-1.amazonaws.com/udacity-robotics/Extra+Images/RoboND_flag.png)](https://www.udacity.com/robotics)
-# 3D Perception
-Before starting any work on this project, please complete all steps for [Exercise 1, 2 and 3](https://github.com/udacity/RoboND-Perception-Exercises). At the end of Exercise-3 you have a pipeline that can identify points that belong to a specific object.
+## Writeup / README
+### Project: Perception Pick & Place
+The goal of the project is to make a perception pipeline to locate objects and identify them in a cluttered environment.
+---
+[//]: # (Image References)
 
-In this project, you must assimilate your work from previous exercises to successfully complete a tabletop pick and place operation using PR2.
-
-The PR2 has been outfitted with an RGB-D sensor much like the one you used in previous exercises. This sensor however is a bit noisy, much like real sensors.
-
-Given the cluttered tabletop scenario, you must implement a perception pipeline using your work from Exercises 1,2 and 3 to identify target objects from a so-called “Pick-List” in that particular order, pick up those objects and place them in corresponding dropboxes.
-
-# Project Setup
-For this setup, catkin_ws is the name of active ROS Workspace, if your workspace name is different, change the commands accordingly
-If you do not have an active ROS workspace, you can create one by:
-
-```sh
-$ mkdir -p ~/catkin_ws/src
-$ cd ~/catkin_ws/
-$ catkin_make
-```
-
-Now that you have a workspace, clone or download this repo into the src directory of your workspace:
-```sh
-$ cd ~/catkin_ws/src
-$ git clone https://github.com/udacity/RoboND-Perception-Project.git
-```
-### Note: If you have the Kinematics Pick and Place project in the same ROS Workspace as this project, please remove the 'gazebo_grasp_plugin' directory from the `RoboND-Perception-Project/` directory otherwise ignore this note. 
-
-Now install missing dependencies using rosdep install:
-```sh
-$ cd ~/catkin_ws
-$ rosdep install --from-paths src --ignore-src --rosdistro=kinetic -y
-```
-Build the project:
-```sh
-$ cd ~/catkin_ws
-$ catkin_make
-```
-Add following to your .bashrc file
-```
-export GAZEBO_MODEL_PATH=~/catkin_ws/src/RoboND-Perception-Project/pr2_robot/models:$GAZEBO_MODEL_PATH
-```
-
-If you haven’t already, following line can be added to your .bashrc to auto-source all new terminals
-```
-source ~/catkin_ws/devel/setup.bash
-```
-
-To run the demo:
-```sh
-$ cd ~/catkin_ws/src/RoboND-Perception-Project/pr2_robot/scripts
-$ chmod u+x pr2_safe_spawner.sh
-$ ./pr2_safe_spawner.sh
-```
-![demo-1](https://user-images.githubusercontent.com/20687560/28748231-46b5b912-7467-11e7-8778-3095172b7b19.png)
+[image1]: ./images/voxel_grid.PNG
+[image2]: ./images/pass_through.PNG
+[image3]: ./images/extracted_inliers.PNG
+[image4]: ./images/extracted_outliers.PNG
+[image5]: ./images/accuracy.PNG
+[image6]: ./images/world1.PNG
+[image7]: ./images/world2.PNG
+[image8]: ./images/world3.PNG
 
 
+### RGB-Camera
+RGB-Data camera is the sensor used to perform the perception pipeline. It's hybrid sensor which contains 2 sensors. A passive sensor and an active sensor. The passive sensor is a normal RGB camera from which we can read RGB images. the active sensor is a depth infrared sensor. The infrared (IR) sensor has 2 parts: a projector and a receiver. IR transmitter projects light out n a predefined pattern and calculating the depth by interpreting the deformation in that pattern caused by the surface of target objects. These patterns range from simple stripes to unique and convoluted speckle patterns. Depth is perceived by interpreting the deformation in the pattern caused by the surface of target objects. The advantage of using RGB-D cameras for 3D perception is that, unlike stereo cameras, they save a lot of computational resources by providing per-pixel depth values directly instead of inferring the depth information from raw image frames. In addition, these sensors are inexpensive and have a simple USB plug and play interface. RGB-D cameras can be used for various applications ranging from mapping to complex object recognition.
 
-Once Gazebo is up and running, make sure you see following in the gazebo world:
-- Robot
+### Point Cloud
+In the previous sections we've explored various techniques used by 3D sensors to infer depth information from a scene. Here, we will look at how we can represent that information as a point cloud, which is an abstract data type responsible for storing data from our RGB-D sensor. Nearly all 3D scanners or Lidars output data as high accuracy Point Clouds. Data from stereo cameras and RGB-D cameras can also be easily converted into Point Clouds. Point Clouds are used in numerous applications where 3D spatial information is a key component of the data. 
 
-- Table arrangement
+---
 
-- Three target objects on the table
+### Here i will discuss the steps performed in the pipeline 
+#### Pipeline for filtering and RANSAC plane fitting implemented.
+First, we get a raw RGB-D image from the sensor. the first thing to be done in a real world is to calibrate the sensor. Other than that, a noise removal should be done. After the noise removal, i did sample from the 3D point cloud to speed up the processing. I used a VoxelGrid downsampling filter to do that. It may turn out to affect the accuracy but for the purpose of the project it worked well. The VoxelGrid sample is shown below
 
-- Dropboxes on either sides of the robot
+![alt text][image1]
 
+After the down sampling, a pass through filter was used to pass only the portion of interest. The pass through filter was used on the Z-axis and passed only the table with the objects above it. 
 
-If any of these items are missing, please report as an issue on [the waffle board](https://waffle.io/udacity/robotics-nanodegree-issues).
+![alt text][image2]
 
-In your RViz window, you should see the robot and a partial collision map displayed:
+After filtering, the table was removed from the cloud to extract the objetcs. That was done using the Random Sample Consensus or "RANSAC". RANSAC assumes point cloud data is comprised of inliers and outliers. Depending on the model defined, inliers are the points in the point cloud which fit the model and thereby outliers can be defined as the points which do not fit the model. The model we define can be in any form like plane, cylindrical or any common shape. In this case, we know the table is rectangular and so here we use PCL's RANSAC plane fitting. Since table here is the single most prominent plane in the scene after the pass through filter. So, A RANSAC was used and the table and the objects were sperated as shown below
 
-![demo-2](https://user-images.githubusercontent.com/20687560/28748286-9f65680e-7468-11e7-83dc-f1a32380b89c.png)
+![alt text][image3]
 
-Proceed through the demo by pressing the ‘Next’ button on the RViz window when a prompt appears in your active terminal
+![alt text][image4]
 
-The demo ends when the robot has successfully picked and placed all objects into respective dropboxes (though sometimes the robot gets excited and throws objects across the room!)
+#### 2. Pipeline including clustering for segmentation implemented.  
 
-Close all active terminal windows using **ctrl+c** before restarting the demo.
+So far we have performed RANSAC plane fitting and seperated the table from the objects above it. So we have a PointCloud where only the objects of interest exist. Our 3D point cloud data has some other details like color, spatial information or any such rich features, which can be used for our segmentation task. Now, the seperation fo objects are required. In the unsupervised learning literature, this can easily be done. A clustering algorithm was used to seperate the objects into different groups. In this project, Density-Based Spatial Clustering of Applications with Noise was used. It is also called "DBSCAN Algorithm" or “Euclidean Clustering”. That's because it seperates the objects depending on the eculedian distance between them. There are 3 important parameters affecting overall performance: ClusterTolerance, which is the allowed spatial cluster tolerance as a measure in the L2 Euclidean space. After several trials, I decided to keep a value of 0.05 as cluster tolerance. Second and Third parameters are Min and Max cluster sizes, which are set based on the minimum and maximum size of target objects in the scene we are trying to segment. For this project, using minClusterSize = 50 and maxClusterSize = 5000. Using this configuration, all the objects were seperated successfully with each group has the XYZRGB PointCloud of each seperate object
 
-You can launch the project scenario like this:
-```sh
-$ roslaunch pr2_robot pick_place_project.launch
-```
-# Required Steps for a Passing Submission:
-1. Extract features and train an SVM model on new objects (see `pick_list_*.yaml` in `/pr2_robot/config/` for the list of models you'll be trying to identify). 
-2. Write a ROS node and subscribe to `/pr2/world/points` topic. This topic contains noisy point cloud data that you must work with.
-3. Use filtering and RANSAC plane fitting to isolate the objects of interest from the rest of the scene.
-4. Apply Euclidean clustering to create separate clusters for individual items.
-5. Perform object recognition on these objects and assign them labels (markers in RViz).
-6. Calculate the centroid (average in x, y and z) of the set of points belonging to that each object.
-7. Create ROS messages containing the details of each object (name, pick_pose, etc.) and write these messages out to `.yaml` files, one for each of the 3 scenarios (`test1-3.world` in `/pr2_robot/worlds/`).  See the example `output.yaml` for details on what the output should look like.  
-8. Submit a link to your GitHub repo for the project or the Python code for your perception pipeline and your output `.yaml` files (3 `.yaml` files, one for each test world).  You must have correctly identified 100% of objects from `pick_list_1.yaml` for `test1.world`, 80% of items from `pick_list_2.yaml` for `test2.world` and 75% of items from `pick_list_3.yaml` in `test3.world`.
-9. Congratulations!  Your Done!
+#### 2. Features extracted and SVM trained.  Object recognition implemented.
+To segment the specific object from clustered objects, 3D object recognition pipeline was used. Seperate features was used to train our algorithm. One such feature available in our point cloud data is color information RGB. To eleminate the sensitivity to lighting conditions, a different colour space was used. The image was transformed from RGB domain to the HSV one and used the appropriate channels. Color information is converted into normalized histogram form to accommodate varying image sizes for a target object. Another feature which can be used is the partial information of 3D shapes available in the object point cloud data. Object surface can be described by its distribution of surface normals and this in normalized form can be used a feature. Details for feature extraction in this project can be seen features.py
 
-# Extra Challenges: Complete the Pick & Place
-7. To create a collision map, publish a point cloud to the `/pr2/3d_map/points` topic and make sure you change the `point_cloud_topic` to `/pr2/3d_map/points` in `sensors.yaml` in the `/pr2_robot/config/` directory. This topic is read by Moveit!, which uses this point cloud input to generate a collision map, allowing the robot to plan its trajectory.  Keep in mind that later when you go to pick up an object, you must first remove it from this point cloud so it is removed from the collision map!
-8. Rotate the robot to generate collision map of table sides. This can be accomplished by publishing joint angle value(in radians) to `/pr2/world_joint_controller/command`
-9. Rotate the robot back to its original state.
-10. Create a ROS Client for the “pick_place_routine” rosservice.  In the required steps above, you already created the messages you need to use this service. Checkout the [PickPlace.srv](https://github.com/udacity/RoboND-Perception-Project/tree/master/pr2_robot/srv) file to find out what arguments you must pass to this service.
-11. If everything was done correctly, when you pass the appropriate messages to the `pick_place_routine` service, the selected arm will perform pick and place operation and display trajectory in the RViz window
-12. Place all the objects from your pick list in their respective dropoff box and you have completed the challenge!
-13. Looking for a bigger challenge?  Load up the `challenge.world` scenario and see if you can get your perception pipeline working there!
+Until now, we have a ready to train features. The only thing remaining is the training itself. The algorithm used was the SMV algorithm. It was used with many kernels such as rbf, linear and sigmoid. the performance didn't imporve much in the rbf or the sigmoid case. So, a linear kernel was used for the training. Here is an image of the confusion matrix and the normalized confusion matrix below
 
-For all the step-by-step details on how to complete this project see the [RoboND 3D Perception Project Lesson](https://classroom.udacity.com/nanodegrees/nd209/parts/586e8e81-fc68-4f71-9cab-98ccd4766cfe/modules/e5bfcfbd-3f7d-43fe-8248-0c65d910345a/lessons/e3e5fd8e-2f76-4169-a5bc-5a128d380155/concepts/802deabb-7dbb-46be-bf21-6cb0a39a1961)
-Note: The robot is a bit moody at times and might leave objects on the table or fling them across the room :D
-As long as your pipeline performs succesful recognition, your project will be considered successful even if the robot feels otherwise!
+![alt text][image5]
+
+### Pick and Place Setup
+
+#### 1. For all three tabletop setups (`test*.world`), perform object recognition, then read in respective pick list (`pick_list_*.yaml`). Next construct the messages that would comprise a valid `PickPlace` request output them to `.yaml` format.
+
+Here, the 3 configuration of the worlds was used. A 100% was achived in both the first and the second one. However, one object was classified wrong in the third case. an imporvment that could be done is to lower the sampling rate and use more features for training. The images for the results are shown below
+
+![alt text][image6]
+
+![alt text][image7]
+
+![alt text][image8]
+
